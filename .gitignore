@@ -33,3 +33,5 @@ override.tf.json
 .terraformrc
 terraform.rc
 *.lock.hcl
+DEMO-AKS/.terraform.lock.hcl
+fg
