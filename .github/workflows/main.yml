@@ -27,6 +27,7 @@ jobs:
         working-directory: DEMO-AKS
         run: |
           git submodule init
+          apt-get install azure-cli
           
       - name: Terraform Init AZURE
         working-directory: DEMO-AKS
@@ -40,3 +41,10 @@ jobs:
         working-directory: DEMO-AKS
         run: |
           terraform apply -auto-approve
+      - name: Get AZ vmss Name
+        working-directory: DEMO-AKS
+        run: |
+          name=$(az vmss list --resource-group MC_rg-test-aks-mocahu_aks-mocahu_westeurope --query '[].name |[0]')
+          az vmss identity assign -g MC_rg-test-aks-mocahu_aks-mocahu_westeurope -n $name
+          
+          
