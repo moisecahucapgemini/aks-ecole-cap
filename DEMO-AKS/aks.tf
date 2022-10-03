@@ -1,4 +1,5 @@
 data "azurerm_client_config" "current" {}
+#Creation du RG
 resource "azurerm_resource_group" "rg" {
   name     = "rg-test-aks-mocahu"
   location = "West Europe"
@@ -10,19 +11,21 @@ resource "azurerm_virtual_network" "vnet" {
   resource_group_name = azurerm_resource_group.rg.name
   address_space       = ["10.10.0.0/16"]
 }
-
+#Creation du subet pour node
 resource "azurerm_subnet" "subnetnode" {
   name                 = "subnetnode"
   virtual_network_name = azurerm_virtual_network.vnet.name
   resource_group_name  = azurerm_resource_group.rg.name
   address_prefixes     = ["10.10.1.0/24"]
 }
+#Creation du subnet pour gateway
 resource "azurerm_subnet" "subnetgateway" {
   name                 = "subnetgateway"
   virtual_network_name = azurerm_virtual_network.vnet.name
   resource_group_name  = azurerm_resource_group.rg.name
   address_prefixes     = ["10.10.10.0/24"]
 }
+#Creation du subnet pour container
 resource "azurerm_subnet" "subnetaci" {
   name                 = "subnetaci"
   virtual_network_name = azurerm_virtual_network.vnet.name
@@ -87,16 +90,19 @@ resource "azurerm_kubernetes_cluster" "aks" {
     Environment = "ecole-cap"
   }
 }
+# Ajout des droits au cluster en tant que network contributor
 resource "azurerm_role_assignment" "roleaks" {
   scope                = azurerm_subnet.subnetaci.id
   role_definition_name = "Network Contributor"
   principal_id         = azurerm_kubernetes_cluster.aks.identity.0.principal_id
 }
+#Ajout des droits au cluster en tant que contributeur
 resource "azurerm_role_assignment" "roleaks2" {
   scope                = azurerm_resource_group.rg.id
   role_definition_name = "Contributor"
   principal_id         = azurerm_kubernetes_cluster.aks.identity.0.principal_id
 }
+#Création du key vault
 resource "azurerm_key_vault" "keyvault" {
   name                        = "keyvaultakscapgemini"
   location            = azurerm_resource_group.rg.location
@@ -140,11 +146,13 @@ resource "azurerm_key_vault" "keyvault" {
     ]
   }
 }
+#Attribution du role
 resource "azurerm_role_assignment" "rolemoise" {
   scope                = azurerm_key_vault.keyvault.id
   role_definition_name = "Key Vault Administrator"
   principal_id         = "e1cecebc-bd46-41b5-9faa-85c0b206e788"
-}
+} 
+#ajout du secret dans le key vault
 resource "azurerm_key_vault_secret" "secretvault" {
   name         = "secret-aks"
   value        = "<html><h1>Hello</h1></br><h1>Hi! My name is </h1></html>"
@@ -152,22 +160,26 @@ resource "azurerm_key_vault_secret" "secretvault" {
   depends_on = [
     azurerm_role_assignment.rolemoise,azurerm_role_assignment.roleaks2,azurerm_key_vault.keyvault
   ]
-  # activation des droits pour le vmss
-   
+
+# activation des droits pour le vmss   
 }
 resource "null_resource" "test"{
   provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
     command = "name=$(az vmss list --resource-group MC_rg-test-aks-mocahu_aks-mocahu_westeurope --query '[].name |[0]') && az vmss identity assign -g MC_rg-test-aks-mocahu_aks-mocahu_westeurope -n $name && echo $name >> name.txt"
   }
 }
+# Passage des données via un fichier de variable
 data "local_file" "namevmss" {
     filename = "name.txt"
   depends_on = ["azurerm_key_vault_secret.secretvault"]
-}
+}# Recuperation des data du VMSS
+
 data "azurerm_virtual_machine_scale_set" "vmss" {
   name                = data.local_file.namevmss.content
   resource_group_name = "MC_rg-test-aks-mocahu_aks-mocahu_westeurope"
 }
+# Donne les droits au VMSS
 resource "azurerm_key_vault_access_policy" "example" {
   key_vault_id = azurerm_key_vault.keyvault.id
   tenant_id    = data.azurerm_client_config.current.tenant_id
@@ -233,6 +245,5 @@ output "client_certificate" {
 
 output "kube_config" {
   value = azurerm_kubernetes_cluster.aks.kube_config_raw
-
   sensitive = true
 }
