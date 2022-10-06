@@ -1,11 +1,25 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: nginx
+---
 apiVersion: secrets-store.csi.x-k8s.io/v1
 kind: SecretProviderClass
 metadata:
   name: azure-kvsecret
+  namespace: nginx
 spec:
   provider: azure
+  secretObjects:
+  - secretName: secret-aks
+    type: Opaque
+    data:
+    - objectName: "secret-aks"
+      key: secret-aks
   parameters:
     usePodIdentity: "false"               # Set to true for using aad-pod-identity to access your key vault
+    userAssignedIdentityID: ""
+    useVMManagedIdentity: "true"
     keyvaultName: "keyvaultakscapgemini"       # Set to the name of your key vault
     cloudName: ""                        # [OPTIONAL for Azure] if not provided, the Azure environment defaults to AzurePublicCloud
     objects:  |
@@ -13,5 +27,6 @@ spec:
         - |
           objectName: secret-aks
           objectType: secret             # object types: secret, key, or cert
-          objectVersion: ""              # [OPTIONAL] object versions, default to latest if empty
-    tenantId: "76a2ae5a-9f00-4f6b-95ed-5d33d77c4d61"
+          objectVersion: ""
+    tenantId: "xxx"
+    # crée l'identité managé du scale set et le trouvé par son nom et non l'id

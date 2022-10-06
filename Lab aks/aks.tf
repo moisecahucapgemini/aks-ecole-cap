@@ -104,7 +104,7 @@ resource "azurerm_role_assignment" "roleaks2" {
 }
 #Création du key vault
 resource "azurerm_key_vault" "keyvault" {
-  name                        = "keyvaultakscapgemini"
+  name                        = "keyvaultakscapgeminis"
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   enabled_for_disk_encryption = true
@@ -159,24 +159,25 @@ resource "azurerm_key_vault_secret" "secretvault" {
   key_vault_id = azurerm_key_vault.keyvault.id
   depends_on = [
     azurerm_role_assignment.rolemoise,azurerm_role_assignment.roleaks2,azurerm_key_vault.keyvault
-  ]  
+  ]
+
+# activation des droits pour le vmss   
 }
-# activation des droits pour le vmss 
 resource "null_resource" "test"{
   provisioner "local-exec" {
-    command = "az vmss list --resource-group MC_rg-test-aks-mocahu_aks-mocahu_westeurope --query '[].name |[0]' | Out-File -Encoding utf8NoBOM -NoNewline -Force name.txt; $name = az vmss list --resource-group MC_rg-test-aks-mocahu_aks-mocahu_westeurope --query '[].name |[0]' ; az vmss identity assign -g MC_rg-test-aks-mocahu_aks-mocahu_westeurope -n $name"
+    command = "az vmss list --resource-group MC_rg-test-aks-mocahu_aks-mocahu_westeurope --query '[].name |[0]'| Out-File -NoNewline name.txt; $name = az vmss list --resource-group MC_rg-test-aks-mocahu_aks-mocahu_westeurope --query '[].name |[0]' ; az vmss identity assign -g MC_rg-test-aks-mocahu_aks-mocahu_westeurope -n $name"
     interpreter = ["PowerShell", "-Command"]
   }
-  depends_on = [ azurerm_key_vault.keyvault]
+  depends_on = [ azurerm_key_vault_secret.secretvault]
 }
 # Passage des données via un fichier de variable
 data "local_file" "namevmss" {
-  filename = "name.txt"
+    filename = "name.txt"
   depends_on = [null_resource.test]
 }# Recuperation des data du VMSS
 
 data "azurerm_virtual_machine_scale_set" "vmss" {
-  name                = replace(data.local_file.namevmss.content,"\"","")
+  name                = data.local_file.namevmss.content
   resource_group_name = "MC_rg-test-aks-mocahu_aks-mocahu_westeurope"
 }
 resource "azurerm_role_assignment" "rolevmmss" {
@@ -229,7 +230,7 @@ resource "kubectl_manifest" "keyvaultinstall" {
   for_each  = data.kubectl_file_documents.keyvaultfile.manifests
   yaml_body = each.value
   depends_on = [
-    azurerm_key_vault.keyvault,azurerm_key_vault_access_policy.example,azurerm_role_assignment.rolevmmss
+    azurerm_key_vault.keyvault,azurerm_key_vault_access_policy.example,azurerm_key_vault_secret.secretvault
   ]
 }
 # etape 2 lancement des instances web
@@ -240,7 +241,7 @@ resource "kubectl_manifest" "yamlinstall" {
   for_each  = data.kubectl_file_documents.yamlfile.manifests
   yaml_body = each.value
   depends_on = [
-    azurerm_kubernetes_cluster.aks,kubectl_manifest.keyvaultinstall,azurerm_key_vault.keyvault,azurerm_role_assignment.rolevmmss
+    azurerm_kubernetes_cluster.aks,kubectl_manifest.keyvaultinstall,azurerm_key_vault.keyvault,azurerm_key_vault_secret.secretvault
   ]
 }
 output "client_certificate" {

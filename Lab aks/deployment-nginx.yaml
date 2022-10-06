@@ -1,7 +1,26 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: v1
+kind: ConfigMap
 metadata:
-  name: nginx-deployment
+  name: nginx-config
+  namespace: nginx
+data:
+  nginx.conf: |
+    events {
+    worker_connections  4096;  ## Default: 1024
+    }
+    http {
+    server {
+    listen 80;
+    root /usr/share/nginx/html/ ;
+    index secret-aks;
+    }
+    }
+---
+apiVersion: apps/v1
+kind: Pod
+metadata:
+  name: nginx-app
+  namespace: nginx
   labels:
     env: dev
 spec:
@@ -14,41 +33,50 @@ spec:
       labels:
         env: dev
     spec:
-      containers:
-      - name: nginx
-        image: nginx #Ajouter le docker du registre azure
-        ports:
-        - containerPort: 80
-        volumeMounts:
-          - name: nginx-index-file
-            mountPath: "/mnt/secrets-store"
-            readOnly: true
       volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
         - name: nginx-index-file
           csi:
             driver: secrets-store.csi.k8s.io
             readOnly: true
             volumeAttributes:
               secretProviderClass: "azure-kvsecret"
+      containers:
+      - name: nginx
+        image: nginx:latest #Ajouter le docker du registre azure
+        ports:
+        - containerPort: 80
+          protocol: TCP
+        volumeMounts:
+          - name: nginx-index-file
+            mountPath: "/usr/share/nginx/html/"
+          - name: nginx-config
+            mountPath: /etc/nginx/nginx.conf
+            subPath: nginx.conf
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: nginx-deployment
+  name: nginx-app
+  namespace: nginx
   labels:
-    app: nginx-deployment
+    env: dev
+    app: nginx-app
 spec:
   selector:
-    app: nginx-deployment
+    app: nginx-app
   ports:
   - port: 80
+    protocol: TCP
+    targetPort: 80
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: nginx-deployment
-  labels:
-    env: dev
+  name: nginx-app
+  namespace: nginx
   annotations:
     kubernetes.io/ingress.class: azure/application-gateway
 spec:
@@ -58,7 +86,7 @@ spec:
       - path: /
         backend:
           service:
-            name: nginx-deployment
+            name: nginx-app
             port:
               number: 80
         pathType: Exact

@@ -1,84 +1,107 @@
-apiVersion: apps/v1
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-master
+  labels:
+    app: redis
+    tier: backend
+    role: master
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+  selector:
+    app: redis
+    tier: backend
+    role: master
+---
+apiVersion: apps/v1 #  for k8s versions before 1.9.0 use apps/v1beta2  and before 1.8.0 use extensions/v1beta1
 kind: Deployment
 metadata:
-  name: azure-vote-back
+  name: redis-master
 spec:
-  replicas: 1
   selector:
     matchLabels:
-      app: azure-vote-back
+      app: redis
+      role: master
+      tier: backend
+  replicas: 1
   template:
     metadata:
       labels:
-        app: azure-vote-back
+        app: redis
+        role: master
+        tier: backend
     spec:
-      nodeSelector:
-        "kubernetes.io/os": linux
       containers:
-      - name: azure-vote-back
-        image: mcr.microsoft.com/oss/bitnami/redis:6.0.8
-        env:
-        - name: ALLOW_EMPTY_PASSWORD
-          value: "yes"
+      - name: master
+        image: k8s.gcr.io/redis:e2e  # or just image: redis
         resources:
           requests:
             cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 250m
-            memory: 256Mi
+            memory: 100Mi
         ports:
         - containerPort: 6379
-          name: redis
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: azure-vote-back
+  name: redis-replica
+  labels:
+    app: redis
+    tier: backend
+    role: replica
 spec:
   ports:
   - port: 6379
   selector:
-    app: azure-vote-back
+    app: redis
+    tier: backend
+    role: replica
 ---
-apiVersion: apps/v1
+apiVersion: apps/v1 #  for k8s versions before 1.9.0 use apps/v1beta2  and before 1.8.0 use extensions/v1beta1
 kind: Deployment
 metadata:
-  name: azure-vote-front
+  name: redis-replica
 spec:
-  replicas: 1
   selector:
     matchLabels:
-      app: azure-vote-front
+      app: redis
+      role: replica
+      tier: backend
+  replicas: 2
   template:
     metadata:
       labels:
-        app: azure-vote-front
+        app: redis
+        role: replica
+        tier: backend
     spec:
-      nodeSelector:
-        "kubernetes.io/os": linux
       containers:
-      - name: azure-vote-front
-        image: mcr.microsoft.com/azuredocs/azure-vote-front:v2
+      - name: replica
+        image: gcr.io/google_samples/gb-redisslave:v1
         resources:
           requests:
             cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 250m
-            memory: 256Mi
-        ports:
-        - containerPort: 80
+            memory: 100Mi
         env:
-        - name: REDIS
-          value: "azure-vote-back"
+        - name: GET_HOSTS_FROM
+          value: dns
+          # If your cluster config does not include a dns service, then to
+          # instead access an environment variable to find the master
+          # service's host, comment out the 'value: dns' line above, and
+          # uncomment the line below:
+          # value: env
+        ports:
+        - containerPort: 6379
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: azure-vote-front
+  name: frontend
   labels:
-    app: azure-vote-front
+    app: guestbook
+    tier: frontend
 spec:
   # comment or delete the following line if you want to use a LoadBalancer
   type: NodePort
@@ -87,13 +110,48 @@ spec:
   # type: LoadBalancer
   ports:
   - port: 80
+  selector:
+    app: guestbook
+    tier: frontend
+---
+apiVersion: apps/v1 #  for k8s versions before 1.9.0 use apps/v1beta2  and before 1.8.0 use extensions/v1beta1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  selector:
+    matchLabels:
+      app: guestbook
+      tier: frontend
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        app: guestbook
+        tier: frontend
+    spec:
+      containers:
+      - name: php-redis
+        image: gcr.io/google-samples/gb-frontend:v4
+        resources:
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        env:
+        - name: GET_HOSTS_FROM
+          value: dns
+          # If your cluster config does not include a dns service, then to
+          # instead access environment variables to find service host
+          # info, comment out the 'value: dns' line above, and uncomment the
+          # line below:
+          # value: env
+        ports:
+        - containerPort: 80
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: nginx-svc
-  labels:
-    env: dev
+  name: frontend
   annotations:
     kubernetes.io/ingress.class: azure/application-gateway
 spec:
@@ -103,7 +161,7 @@ spec:
       - path: /
         backend:
           service:
-            name: azure-vote-front
+            name: frontend
             port:
               number: 80
         pathType: Exact
