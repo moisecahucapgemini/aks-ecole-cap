@@ -164,8 +164,8 @@ resource "azurerm_key_vault_secret" "secretvault" {
 # activation des droits pour le vmss 
 resource "null_resource" "test"{
   provisioner "local-exec" {
-    command = "az vmss list --resource-group MC_rg-test-aks-mocahu_aks-mocahu_westeurope --query '[].name |[0]' | Out-File -Encoding utf8NoBOM -NoNewline -Force name.txt; $name = az vmss list --resource-group MC_rg-test-aks-mocahu_aks-mocahu_westeurope --query '[].name |[0]' ; az vmss identity assign -g MC_rg-test-aks-mocahu_aks-mocahu_westeurope -n $name"
-    interpreter = ["PowerShell", "-Command"]
+    command = "az vmss list --resource-group MC_rg-test-aks-mocahu_aks-mocahu_westeurope --query '[].name |[0]' | Out-File -Encoding utf8 -NoNewline -Force C:\\Users\\mocahu\\Desktop\\ECOLEC~1\\aks-ecole-cap\\DEMO-AKS\\name.txt; $name = az vmss list --resource-group MC_rg-test-aks-mocahu_aks-mocahu_westeurope --query '[].name |[0]' ; az vmss identity assign -g MC_rg-test-aks-mocahu_aks-mocahu_westeurope -n $name"
+    interpreter = ["C:\\PROGRA~1\\PowerShell\\7\\pwsh.exe", "-Command"]
   }
   depends_on = [ azurerm_key_vault.keyvault]
 }
@@ -251,4 +251,4 @@ output "client_certificate" {
 output "kube_config" {
   value = azurerm_kubernetes_cluster.aks.kube_config_raw
   sensitive = true
-} 
+}

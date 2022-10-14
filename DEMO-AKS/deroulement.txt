@@ -1,0 +1,6 @@
+Presentation de moi
+Revenir sur les concepts non compris de kubernetes
+Jauger le niveau
+
+Lancer les debutant dans le TP normal
+Lancer les plus avancé dans le TP sous forme de Terraform
