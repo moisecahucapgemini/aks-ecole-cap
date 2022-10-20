@@ -1,1 +1,0 @@
-"aks-default-97515221-vmss"

@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ns-wordpress
+  namespace: ns-wordpress
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysecret
+  namespace: ns-wordpress
+type: Opaque
+data:
+  MYSQL_ROOT_PASSWORD: bXlzcWwxMjM0 # mysql1234 base64 encoded
+---
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: rs-mysql
+  namespace: ns-wordpress
+  labels:
+    app: mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+  template:
+    metadata:
+      labels:
+        app: mysql
+    spec:
+      containers:
+      - name: ct-database
+        image: mysql:5.7
+        args:
+          # mount volume
+          - "--ignore-db-dir=lost+found"
+        # add root password
+        envFrom:
+          - secretRef:
+              name: mysecret
+        ports:
+          - containerPort: 3306
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-mysql
+  namespace: ns-wordpress
+spec:
+  ports:
+  - port: 3306
+    protocol: TCP
+  selector:
+    app: mysql

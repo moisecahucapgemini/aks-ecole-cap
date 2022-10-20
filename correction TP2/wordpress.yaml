@@ -1,0 +1,112 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: mystorage
+  namespace: ns-wordpress
+provisioner: disk.csi.azure.com
+parameters:
+  skuName: Standard_LRS
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mypvc
+  namespace: ns-wordpress
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: mystorage
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: deploy-wordpress
+  namespace: ns-wordpress
+spec:
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      containers:
+        - name: ct-wordpress
+          image: wordpress:5.8.3-php7.4-apache
+          ports:
+          - containerPort: 80
+            protocol: TCP
+          volumeMounts:
+            - name: wordpress-data
+              mountPath: /var/www
+          env:
+            - name: WORDPRESS_DB_HOST
+              value: svc-mysql.ns-wordpress.svc.cluster.local
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysecret
+                  key: MYSQL_ROOT_PASSWORD
+            - name: WORDPRESS_DB_USER
+              value: root
+            - name: WORDPRESS_DB_NAME
+              value: wordpress
+      volumes:
+        - name: wordpress-data
+          persistentVolumeClaim:
+            claimName: mypvc
+---
+apiVersion: autoscaling/v1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: hpa-wordpress
+  namespace: ns-wordpress
+spec:
+  maxReplicas: 2 # define max replica count
+  minReplicas: 1  # define min replica count
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: deploy-wordpress
+  targetCPUUtilizationPercentage: 10 # target CPU utilization
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: svc-wordpress
+  namespace: ns-wordpress
+spec:
+  type: Nodeport # LoadBalancer if no application gateway (ie public AKS cluster)
+  selector:
+    app: wordpress
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 80
+
+# To be created only with private cluster and application gateway
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rule-wordpress
+  namespace: ns-wordpress
+  annotations:
+    kubernetes.io/ingress.class: azure/application-gateway
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        backend:
+          service:
+            name: svc-wordpress
+            port:
+              number: 80
+        pathType: Exact
